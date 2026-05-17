@@ -27,20 +27,41 @@ pub fn paste(text: &str) -> Result<(), InsertionError> {
     let mut clipboard =
         Clipboard::new().map_err(|err| InsertionError::Clipboard(err.to_string()))?;
     let snapshot = clipboard.get_text().ok();
-    clipboard
-        .set_text(text)
-        .map_err(|err| InsertionError::Clipboard(err.to_string()))?;
+    write_hidden(&mut clipboard, text)?;
     keystroke::paste()?;
     thread::spawn(move || {
         thread::sleep(Duration::from_millis(CLIPBOARD_RESTORE_DELAY_MS));
         let Ok(mut clipboard) = Clipboard::new() else {
             return;
         };
-        if let Some(prior) = snapshot {
-            let _ = clipboard.set_text(prior);
+        match snapshot {
+            Some(prior) => {
+                let _ = write_hidden(&mut clipboard, &prior);
+            }
+            None => {
+                let _ = clipboard.clear();
+            }
         }
     });
     Ok(())
+}
+
+fn write_hidden(clipboard: &mut Clipboard, text: &str) -> Result<(), InsertionError> {
+    #[cfg(target_os = "macos")]
+    {
+        use arboard::SetExtApple;
+        clipboard
+            .set()
+            .exclude_from_history()
+            .text(text)
+            .map_err(|err| InsertionError::Clipboard(err.to_string()))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        clipboard
+            .set_text(text)
+            .map_err(|err| InsertionError::Clipboard(err.to_string()))
+    }
 }
 
 #[cfg(target_os = "macos")]
