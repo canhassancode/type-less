@@ -108,7 +108,7 @@ fn hex_digest(hasher: Sha256) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelStatus {
     NotInstalled,
@@ -116,7 +116,7 @@ pub enum ModelStatus {
     ChecksumMismatch,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct InstallationState {
     pub items: Vec<(String, ModelStatus)>,
 }

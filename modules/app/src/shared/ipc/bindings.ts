@@ -68,12 +68,37 @@ async cancelDictationSession() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async installationStatus() : Promise<Result<InstallationState, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("installation_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async downloadModel(modelId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("download_model", { modelId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
 /** user-defined events **/
 
 
+export const events = __makeEvents__<{
+modelDownloadCompleted: ModelDownloadCompleted,
+modelDownloadFailed: ModelDownloadFailed,
+modelDownloadProgress: ModelDownloadProgress
+}>({
+modelDownloadCompleted: "model-download-completed",
+modelDownloadFailed: "model-download-failed",
+modelDownloadProgress: "model-download-progress"
+})
 
 /** user-defined constants **/
 
@@ -81,7 +106,11 @@ async cancelDictationSession() : Promise<Result<null, string>> {
 
 /** user-defined types **/
 
-
+export type InstallationState = { items: ([string, ModelStatus])[] }
+export type ModelDownloadCompleted = { model_id: string }
+export type ModelDownloadFailed = { model_id: string; message: string }
+export type ModelDownloadProgress = { model_id: string; downloaded: number; total: number }
+export type ModelStatus = "not_installed" | "installed" | "checksum_mismatch"
 
 /** tauri-specta globals **/
 
