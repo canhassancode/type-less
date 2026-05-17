@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod engines;
 mod insertion;
 mod platform;
 mod session;
@@ -17,10 +18,14 @@ use tauri::{AppHandle, Manager, State, WindowEvent};
 use tauri_plugin_positioner::{Position, WindowExt};
 use tauri_specta::{Builder, Event, collect_commands, collect_events};
 
+use engines::{EngineHandles, spawn_loaders};
 use session::{Session, SessionError, StopFn};
 
 const MODELS_JSON: &str = include_str!("../../../models.json");
 const DOWNLOAD_DISK_HEADROOM_BYTES: u64 = 1024 * 1024 * 1024;
+const CLEANUP_PROMPT: &str = include_str!("../../pipeline/prompts/cleanup_v1.txt");
+const ASR_MODEL_FILENAME: &str = "ggml-small.en.bin";
+const CLEANUP_MODEL_FILENAME: &str = "qwen2.5-1.5b-instruct-q4_k_m.gguf";
 
 fn parse_registry() -> Result<Registry, String> {
     Registry::from_json(MODELS_JSON).map_err(|err| err.to_string())
@@ -110,10 +115,14 @@ fn cancel_dictation_session(state: State<'_, Session>) -> Result<(), String> {
 
 #[tauri::command]
 #[specta::specta]
-fn installation_status(app: AppHandle) -> Result<InstallationState, String> {
-    let registry = parse_registry()?;
+async fn installation_status(app: AppHandle) -> Result<InstallationState, String> {
     let dir = models_dir(&app)?;
-    Ok(check_installation(&registry, &dir))
+    tauri::async_runtime::spawn_blocking(move || -> Result<InstallationState, String> {
+        let registry = parse_registry()?;
+        Ok(check_installation(&registry, &dir))
+    })
+    .await
+    .map_err(|err| err.to_string())?
 }
 
 #[tauri::command]
@@ -223,15 +232,31 @@ fn stringify<E: std::fmt::Display>(error: E) -> String {
     error.to_string()
 }
 
-fn build_session() -> Session {
+fn build_session(handles: EngineHandles) -> Session {
+    let asr_handles = handles.clone();
+    let cleanup_handles = handles;
     Session::new(
         || {
             pipeline::audio::start()
                 .map(|audio| Box::new(move || audio.stop()) as StopFn)
                 .map_err(|err| SessionError::Audio(err.to_string()))
         },
-        |_samples| Err(SessionError::Asr("engines not yet wired".into())),
-        |_transcript| Err(SessionError::Cleanup("engines not yet wired".into())),
+        move |samples| {
+            let engine = asr_handles
+                .try_asr()
+                .ok_or_else(|| SessionError::EngineNotReady("asr".into()))?;
+            engine
+                .transcribe(samples)
+                .map_err(|err| SessionError::Asr(err.to_string()))
+        },
+        move |transcript| {
+            let engine = cleanup_handles
+                .try_cleanup()
+                .ok_or_else(|| SessionError::EngineNotReady("cleanup".into()))?;
+            engine
+                .cleanup(transcript)
+                .map_err(|err| SessionError::Cleanup(err.to_string()))
+        },
         |text| insertion::paste(text).map_err(|err| SessionError::Paste(err.to_string())),
     )
 }
@@ -275,11 +300,15 @@ fn main() {
         return;
     }
 
-    tauri::Builder::default()
+    let engine_handles = EngineHandles::new();
+    let handles_for_loaders = engine_handles.clone();
+
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .manage(build_session())
+        .manage(engine_handles.clone())
+        .manage(build_session(engine_handles))
         .invoke_handler(builder.invoke_handler())
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -323,6 +352,20 @@ fn main() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(move |app_handle, event| {
+        if matches!(event, tauri::RunEvent::Ready) {
+            match models_dir(app_handle) {
+                Ok(dir) => spawn_loaders(
+                    handles_for_loaders.clone(),
+                    dir.join(ASR_MODEL_FILENAME),
+                    dir.join(CLEANUP_MODEL_FILENAME),
+                    CLEANUP_PROMPT,
+                ),
+                Err(err) => eprintln!("[engines] could not resolve models_dir: {err}"),
+            }
+        }
+    });
 }

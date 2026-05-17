@@ -18,6 +18,7 @@ pub enum SessionError {
     Asr(String),
     Cleanup(String),
     Paste(String),
+    EngineNotReady(String),
     NotImplemented,
 }
 
@@ -150,6 +151,29 @@ mod tests {
             *pasted.lock().expect("sink poisoned"),
             vec!["Hello, world.".to_string()],
         );
+    }
+
+    #[test]
+    fn engine_not_ready_surfaces_through_session_stop() {
+        let pasted: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let session = Session::new(
+            fake_audio(),
+            fake_asr(|_samples| Err(SessionError::EngineNotReady("asr".into()))),
+            ok_cleanup("should not be called"),
+            fake_paste(pasted.clone()),
+        );
+
+        session.start().expect("start should succeed");
+        let stop_result = session.stop();
+        assert_eq!(stop_result, Err(SessionError::EngineNotReady("asr".into())));
+
+        assert!(
+            pasted.lock().expect("sink poisoned").is_empty(),
+            "paste must not run when engines are not ready",
+        );
+        session
+            .start()
+            .expect("session must be Idle after EngineNotReady so the next start succeeds");
     }
 
     #[test]
