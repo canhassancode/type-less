@@ -7,6 +7,8 @@ if (!container) throw new Error('Overlay window: missing #root');
 
 createRoot(container).render(
   <StrictMode>
-    <div className="pointer-events-none flex h-full w-full items-center justify-center" />
+    <div className="pointer-events-none flex h-full w-full items-center justify-center bg-blue-500/30 text-white">
+      overlay
+    </div>
   </StrictMode>,
 );

@@ -7,7 +7,7 @@
   "license": "MIT",
   "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "tauri": "tauri --config crates/tauri-shell/tauri.conf.json",
+    "tauri": "cd crates/tauri-shell && tauri",
     "dev": "pnpm --filter @type-less/app dev",
     "build": "pnpm -r build",
     "test": "vitest run",

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "type-less",
+  "version": "0.0.0",
+  "identifier": "io.github.canhassancode.type-less",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @type-less/app dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "pnpm --filter @type-less/app build",
+    "frontendDist": "../../modules/app/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "settings",
+        "url": "settings.html",
+        "title": "type-less — Settings",
+        "width": 480,
+        "height": 600,
+        "visible": false,
+        "resizable": true,
+        "decorations": true
+      },
+      {
+        "label": "pill",
+        "url": "pill.html",
+        "title": "type-less — Pill",
+        "width": 200,
+        "height": 40,
+        "visible": false,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false
+      },
+      {
+        "label": "overlay",
+        "url": "overlay.html",
+        "title": "type-less — Overlay",
+        "width": 600,
+        "height": 200,
+        "visible": false,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "shadow": false
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "trayIcon": {
+      "id": "main",
+      "iconPath": "icons/tray.png",
+      "iconAsTemplate": true
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "icon": ["icons/icon.png"],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    }
+  },
+  "plugins": {
+    "fs": {},
+    "positioner": {}
+  }
+}
