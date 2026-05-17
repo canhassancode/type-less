@@ -284,6 +284,76 @@ mod tests {
 
     #[test]
     #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn lock_e9_no_failure_surfaces() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let inputs = [
+            "hello world",
+            "yeah you know its really good",
+            "the meeting is at three actually four",
+            "we use postgres on aws",
+        ];
+
+        let banned_preambles = [
+            "Here is",
+            "Here's",
+            "Sure,",
+            "Output:",
+            "Cleaned:",
+            "I have",
+            "I would",
+            "The cleaned",
+        ];
+
+        for input in inputs {
+            let out = engine.cleanup(input).expect("cleanup");
+            eprintln!("E9 input={input:?} → {out:?}");
+            for banned in banned_preambles {
+                assert!(
+                    !out.starts_with(banned),
+                    "E9 preamble '{banned}' leaked for input {input:?}, got: {out:?}",
+                );
+            }
+            assert!(
+                !(out.starts_with('"') && out.ends_with('"')),
+                "E9 quote-wrap leaked for input {input:?}, got: {out:?}",
+            );
+            assert!(
+                !out.contains("```"),
+                "E9 code fence leaked for input {input:?}, got: {out:?}",
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn lock_prefix_kv_idempotent_across_calls() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let input = "their going to the store there are three of them";
+        let first = engine.cleanup(input).expect("first cleanup");
+        let second = engine.cleanup(input).expect("second cleanup");
+        let third = engine.cleanup(input).expect("third cleanup");
+
+        eprintln!("prefix-kv calls: {first:?}, {second:?}, {third:?}");
+        assert_eq!(
+            first, second,
+            "second call must reproduce first (seq 1 cleared, seq 0 intact)",
+        );
+        assert_eq!(
+            second, third,
+            "third call must reproduce second (cache hygiene durable)",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
     fn lock_e7_i_think_preserved_as_hedging() {
         let Some(engine) = load_engine() else {
             eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
