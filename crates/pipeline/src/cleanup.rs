@@ -284,6 +284,130 @@ mod tests {
 
     #[test]
     #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn lock_e7_i_think_preserved_as_hedging() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let out = engine
+            .cleanup("I think we should ship it tomorrow")
+            .expect("cleanup hedged input");
+
+        eprintln!("E7#21 I think (hedging) → {out:?}");
+        assert!(
+            out.contains("I think"),
+            "'I think' hedging must be preserved, got: {out:?}",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn lock_e8_proper_noun_capitalised() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let out = engine
+            .cleanup("I met sarah from product yesterday")
+            .expect("cleanup proper-noun input");
+
+        eprintln!("E8#23 proper noun → {out:?}");
+        assert!(
+            out.contains("Sarah"),
+            "'sarah' must be capitalised to 'Sarah', got: {out:?}",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn lock_e2_you_know_kept_as_literal() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let out = engine
+            .cleanup("you know what I mean")
+            .expect("cleanup literal you-know input");
+
+        eprintln!("E2#9 you know (literal) → {out:?}");
+        assert!(
+            out.to_lowercase().contains("you know"),
+            "'you know' as literal must be kept, got: {out:?}",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn lock_e2_you_know_removed_as_filler() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let out = engine
+            .cleanup("this is you know really good")
+            .expect("cleanup filler you-know input");
+
+        eprintln!("E2#10 you know (filler) → {out:?}");
+        let lower = out.to_lowercase();
+        assert!(
+            !lower.contains("you know"),
+            "'you know' as filler must be removed, got: {out:?}",
+        );
+        assert!(
+            lower.contains("really good"),
+            "speaker's content must survive cleanup, got: {out:?}",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn lock_e2_like_removed_as_filler() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let out = engine
+            .cleanup("it was like really cold")
+            .expect("cleanup filler-like input");
+
+        eprintln!("E2#8 like (filler) → {out:?}");
+        let lower = out.to_lowercase();
+        assert!(
+            !lower.contains(" like "),
+            "'like' as filler must be removed, got: {out:?}",
+        );
+        assert!(
+            lower.contains("really cold"),
+            "speaker's content must survive cleanup, got: {out:?}",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn lock_e2_like_kept_as_verb() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let out = engine
+            .cleanup("I felt like running today")
+            .expect("cleanup verb-like input");
+
+        eprintln!("E2#7 like (verb) → {out:?}");
+        assert!(
+            out.to_lowercase().contains("like"),
+            "'like' as verb must be kept, got: {out:?}",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
     fn lock_e1_empty_input_returns_empty() {
         let Some(engine) = load_engine() else {
             eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
