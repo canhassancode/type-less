@@ -2,6 +2,7 @@
 
 mod insertion;
 mod platform;
+mod session;
 
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, WindowEvent};
