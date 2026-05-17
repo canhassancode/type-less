@@ -13,7 +13,8 @@
       "!**/target",
       "!**/.vite",
       "!**/coverage",
-      "!**/*.tsbuildinfo"
+      "!**/*.tsbuildinfo",
+      "!modules/app/src/shared/ipc/bindings.ts"
     ]
   },
   "formatter": {
