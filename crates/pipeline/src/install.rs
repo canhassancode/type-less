@@ -2,7 +2,10 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+
+use crate::models::Registry;
 
 #[derive(Debug, thiserror::Error)]
 pub enum InstallError {
@@ -105,6 +108,38 @@ fn hex_digest(hasher: Sha256) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelStatus {
+    NotInstalled,
+    Installed,
+    ChecksumMismatch,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstallationState {
+    pub items: Vec<(String, ModelStatus)>,
+}
+
+pub fn check_installation(registry: &Registry, models_dir: &Path) -> InstallationState {
+    let items = registry
+        .models
+        .iter()
+        .map(|m| {
+            let path = models_dir.join(&m.filename);
+            let status = if !path.exists() {
+                ModelStatus::NotInstalled
+            } else if verify_existing_sha256(&path, &m.sha256).unwrap_or(false) {
+                ModelStatus::Installed
+            } else {
+                ModelStatus::ChecksumMismatch
+            };
+            (m.id.clone(), status)
+        })
+        .collect();
+    InstallationState { items }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,5 +240,55 @@ mod tests {
     fn has_disk_space_reports_false_when_request_is_impossibly_large() {
         let dir = TempDir::new().unwrap();
         assert!(!has_disk_space(dir.path(), u64::MAX).unwrap());
+    }
+
+    fn registry_with_model(filename: &str, sha: &str) -> crate::models::Registry {
+        use crate::models::{Model, Purpose, Registry};
+        Registry {
+            models: vec![Model {
+                id: "test".into(),
+                purpose: Purpose::Asr,
+                url: "https://huggingface.co/x".into(),
+                sha256: sha.into(),
+                size_bytes: 1,
+                filename: filename.into(),
+            }],
+        }
+    }
+
+    #[test]
+    fn check_installation_reports_not_installed_when_file_absent() {
+        let dir = TempDir::new().unwrap();
+        let registry = registry_with_model("missing.bin", &"0".repeat(64));
+
+        let state = check_installation(&registry, dir.path());
+
+        assert_eq!(state.items.len(), 1);
+        assert_eq!(state.items[0].0, "test");
+        assert_eq!(state.items[0].1, ModelStatus::NotInstalled);
+    }
+
+    #[test]
+    fn check_installation_reports_installed_when_sha_matches() {
+        let dir = TempDir::new().unwrap();
+        let bytes = b"installed bytes";
+        let sha = known_sha256_of(bytes);
+        fs::write(dir.path().join("model.bin"), bytes).unwrap();
+        let registry = registry_with_model("model.bin", &sha);
+
+        let state = check_installation(&registry, dir.path());
+
+        assert_eq!(state.items[0].1, ModelStatus::Installed);
+    }
+
+    #[test]
+    fn check_installation_reports_mismatch_when_sha_does_not_match() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("model.bin"), b"corrupted").unwrap();
+        let registry = registry_with_model("model.bin", &"f".repeat(64));
+
+        let state = check_installation(&registry, dir.path());
+
+        assert_eq!(state.items[0].1, ModelStatus::ChecksumMismatch);
     }
 }
