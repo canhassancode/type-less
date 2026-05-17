@@ -1,7 +1,10 @@
-#![allow(dead_code)]
-
+use std::fmt;
 use std::mem;
+use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
+
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
 #[derive(Default)]
 pub struct AudioBuffer {
@@ -22,6 +25,102 @@ impl AudioBuffer {
 
     pub fn drain(&self) -> Vec<f32> {
         mem::take(&mut *self.samples.lock().expect("audio buffer poisoned"))
+    }
+}
+
+#[derive(Debug)]
+pub enum AudioError {
+    NoInputDevice,
+    DefaultConfig(cpal::DefaultStreamConfigError),
+    BuildStream(cpal::BuildStreamError),
+    PlayStream(cpal::PlayStreamError),
+    UnsupportedSampleFormat(cpal::SampleFormat),
+    ThreadDied,
+}
+
+impl fmt::Display for AudioError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoInputDevice => write!(f, "no default input device available"),
+            Self::DefaultConfig(err) => write!(f, "failed to read default input config: {err}"),
+            Self::BuildStream(err) => write!(f, "failed to build input stream: {err}"),
+            Self::PlayStream(err) => write!(f, "failed to start input stream: {err}"),
+            Self::UnsupportedSampleFormat(fmt) => write!(f, "unsupported sample format: {fmt:?}"),
+            Self::ThreadDied => write!(f, "audio capture thread terminated unexpectedly"),
+        }
+    }
+}
+
+impl std::error::Error for AudioError {}
+
+pub struct AudioSession {
+    buffer: Arc<AudioBuffer>,
+    shutdown: SyncSender<()>,
+    thread: JoinHandle<()>,
+}
+
+pub fn start() -> Result<AudioSession, AudioError> {
+    let buffer = AudioBuffer::new();
+    let buffer_for_thread = Arc::clone(&buffer);
+    let (shutdown_tx, shutdown_rx) = mpsc::sync_channel::<()>(1);
+    let (ready_tx, ready_rx) = mpsc::sync_channel::<Result<(), AudioError>>(1);
+
+    let thread = thread::spawn(move || {
+        let stream = match build_input_stream(buffer_for_thread) {
+            Ok(stream) => stream,
+            Err(err) => {
+                let _ = ready_tx.send(Err(err));
+                return;
+            }
+        };
+        if let Err(err) = stream.play() {
+            let _ = ready_tx.send(Err(AudioError::PlayStream(err)));
+            return;
+        }
+        let _ = ready_tx.send(Ok(()));
+        let _ = shutdown_rx.recv();
+        drop(stream);
+    });
+
+    match ready_rx.recv() {
+        Ok(Ok(())) => Ok(AudioSession {
+            buffer,
+            shutdown: shutdown_tx,
+            thread,
+        }),
+        Ok(Err(err)) => Err(err),
+        Err(_) => Err(AudioError::ThreadDied),
+    }
+}
+
+fn build_input_stream(buffer: Arc<AudioBuffer>) -> Result<cpal::Stream, AudioError> {
+    let host = cpal::default_host();
+    let device = host.default_input_device().ok_or(AudioError::NoInputDevice)?;
+    let config = device
+        .default_input_config()
+        .map_err(AudioError::DefaultConfig)?;
+    let sample_format = config.sample_format();
+    let stream_config: cpal::StreamConfig = config.into();
+    let err_fn = |err| eprintln!("[pipeline::audio] capture error: {err}");
+
+    match sample_format {
+        cpal::SampleFormat::F32 => device
+            .build_input_stream(
+                &stream_config,
+                move |data: &[f32], _: &cpal::InputCallbackInfo| buffer.push(data),
+                err_fn,
+                None,
+            )
+            .map_err(AudioError::BuildStream),
+        other => Err(AudioError::UnsupportedSampleFormat(other)),
+    }
+}
+
+impl AudioSession {
+    pub fn stop(self) -> Vec<f32> {
+        let _ = self.shutdown.send(());
+        let _ = self.thread.join();
+        self.buffer.drain()
     }
 }
 

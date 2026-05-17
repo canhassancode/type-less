@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.4.0",
+    "@tauri-apps/plugin-global-shortcut": "^2.0.0",
     "@type-less/activation": "workspace:*",
     "@type-less/levelling": "workspace:*",
     "@type-less/theme-loader": "workspace:*",

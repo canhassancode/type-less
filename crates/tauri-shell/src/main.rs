@@ -4,11 +4,18 @@ mod insertion;
 mod platform;
 mod session;
 
+use specta_typescript::Typescript;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, WindowEvent};
+use tauri::{AppHandle, Manager, State, WindowEvent};
 use tauri_plugin_positioner::{Position, WindowExt};
+use tauri_specta::{Builder, collect_commands};
+
+use session::{Session, SessionError, StopFn};
+
+const TRACER_PASTE_TEXT: &str = "Hello, type-less!";
 
 #[tauri::command]
+#[specta::specta]
 fn show_settings(app: AppHandle) -> Result<(), String> {
     let window = window(&app, "settings")?;
     window.show().map_err(stringify)?;
@@ -17,14 +24,13 @@ fn show_settings(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 fn show_pill(app: AppHandle) -> Result<(), String> {
-    let window = window(&app, "pill")?;
-    window.move_window(Position::BottomCenter).map_err(stringify)?;
-    window.show().map_err(stringify)?;
-    Ok(())
+    set_pill_visible(&app, true)
 }
 
 #[tauri::command]
+#[specta::specta]
 fn show_overlay(app: AppHandle) -> Result<(), String> {
     let window = window(&app, "overlay")?;
     window.move_window(Position::TopCenter).map_err(stringify)?;
@@ -33,13 +39,43 @@ fn show_overlay(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 fn hide_pill(app: AppHandle) -> Result<(), String> {
-    window(&app, "pill")?.hide().map_err(stringify)
+    set_pill_visible(&app, false)
 }
 
 #[tauri::command]
+#[specta::specta]
 fn hide_overlay(app: AppHandle) -> Result<(), String> {
     window(&app, "overlay")?.hide().map_err(stringify)
+}
+
+#[tauri::command]
+#[specta::specta]
+fn start_session(app: AppHandle, state: State<'_, Session>) -> Result<(), String> {
+    state.start().map_err(|err| format!("{err:?}"))?;
+    set_pill_visible(&app, true)
+}
+
+#[tauri::command]
+#[specta::specta]
+fn stop_session(app: AppHandle, state: State<'_, Session>) -> Result<(), String> {
+    let stop_result = state
+        .stop(TRACER_PASTE_TEXT)
+        .map_err(|err| format!("{err:?}"));
+    let _ = set_pill_visible(&app, false);
+    stop_result
+}
+
+fn set_pill_visible(app: &AppHandle, visible: bool) -> Result<(), String> {
+    let window = window(app, "pill")?;
+    if visible {
+        window.move_window(Position::BottomCenter).map_err(stringify)?;
+        window.show().map_err(stringify)?;
+    } else {
+        window.hide().map_err(stringify)?;
+    }
+    Ok(())
 }
 
 fn window(app: &AppHandle, label: &str) -> Result<tauri::WebviewWindow, String> {
@@ -51,17 +87,45 @@ fn stringify<E: std::fmt::Display>(error: E) -> String {
     error.to_string()
 }
 
+fn build_session() -> Session {
+    Session::new(
+        || {
+            pipeline::audio::start()
+                .map(|audio| Box::new(move || audio.stop()) as StopFn)
+                .map_err(|err| SessionError::Audio(err.to_string()))
+        },
+        |text| insertion::paste(text).map_err(|err| SessionError::Paste(err.to_string())),
+    )
+}
+
 fn main() {
+    let builder = Builder::<tauri::Wry>::new().commands(collect_commands![
+        show_settings,
+        show_pill,
+        show_overlay,
+        hide_pill,
+        hide_overlay,
+        start_session,
+        stop_session,
+    ]);
+
+    #[cfg(debug_assertions)]
+    {
+        let bindings_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../modules/app/src/shared/ipc/bindings.ts",
+        );
+        builder
+            .export(Typescript::default(), bindings_path)
+            .expect("failed to export typescript bindings");
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_positioner::init())
-        .invoke_handler(tauri::generate_handler![
-            show_settings,
-            show_pill,
-            show_overlay,
-            hide_pill,
-            hide_overlay
-        ])
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .manage(build_session())
+        .invoke_handler(builder.invoke_handler())
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "settings" {
