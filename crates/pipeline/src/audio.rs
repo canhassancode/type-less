@@ -53,21 +53,31 @@ impl fmt::Display for AudioError {
 
 impl std::error::Error for AudioError {}
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CapturedAudio {
+    pub samples: Vec<f32>,
+    pub sample_rate: u32,
+    pub channels: u16,
+}
+
 pub struct AudioSession {
     buffer: Arc<AudioBuffer>,
     shutdown: SyncSender<()>,
     thread: JoinHandle<()>,
+    sample_rate: u32,
+    channels: u16,
 }
 
 pub fn start() -> Result<AudioSession, AudioError> {
     let buffer = AudioBuffer::new();
     let buffer_for_thread = Arc::clone(&buffer);
     let (shutdown_tx, shutdown_rx) = mpsc::sync_channel::<()>(1);
-    let (ready_tx, ready_rx) = mpsc::sync_channel::<Result<(), AudioError>>(1);
+    let (ready_tx, ready_rx) =
+        mpsc::sync_channel::<Result<StreamFormat, AudioError>>(1);
 
     let thread = thread::spawn(move || {
-        let stream = match build_input_stream(buffer_for_thread) {
-            Ok(stream) => stream,
+        let (stream, format) = match build_input_stream(buffer_for_thread) {
+            Ok(parts) => parts,
             Err(err) => {
                 let _ = ready_tx.send(Err(err));
                 return;
@@ -77,23 +87,32 @@ pub fn start() -> Result<AudioSession, AudioError> {
             let _ = ready_tx.send(Err(AudioError::PlayStream(err)));
             return;
         }
-        let _ = ready_tx.send(Ok(()));
+        let _ = ready_tx.send(Ok(format));
         let _ = shutdown_rx.recv();
         drop(stream);
     });
 
     match ready_rx.recv() {
-        Ok(Ok(())) => Ok(AudioSession {
+        Ok(Ok(format)) => Ok(AudioSession {
             buffer,
             shutdown: shutdown_tx,
             thread,
+            sample_rate: format.sample_rate,
+            channels: format.channels,
         }),
         Ok(Err(err)) => Err(err),
         Err(_) => Err(AudioError::ThreadDied),
     }
 }
 
-fn build_input_stream(buffer: Arc<AudioBuffer>) -> Result<cpal::Stream, AudioError> {
+struct StreamFormat {
+    sample_rate: u32,
+    channels: u16,
+}
+
+fn build_input_stream(
+    buffer: Arc<AudioBuffer>,
+) -> Result<(cpal::Stream, StreamFormat), AudioError> {
     let host = cpal::default_host();
     let device = host.default_input_device().ok_or(AudioError::NoInputDevice)?;
     let config = device
@@ -101,6 +120,10 @@ fn build_input_stream(buffer: Arc<AudioBuffer>) -> Result<cpal::Stream, AudioErr
         .map_err(AudioError::DefaultConfig)?;
     let sample_format = config.sample_format();
     let stream_config: cpal::StreamConfig = config.into();
+    let format = StreamFormat {
+        sample_rate: stream_config.sample_rate.0,
+        channels: stream_config.channels,
+    };
     let err_fn = |err| eprintln!("[pipeline::audio] capture error: {err}");
 
     match sample_format {
@@ -111,16 +134,21 @@ fn build_input_stream(buffer: Arc<AudioBuffer>) -> Result<cpal::Stream, AudioErr
                 err_fn,
                 None,
             )
+            .map(|stream| (stream, format))
             .map_err(AudioError::BuildStream),
         other => Err(AudioError::UnsupportedSampleFormat(other)),
     }
 }
 
 impl AudioSession {
-    pub fn stop(self) -> Vec<f32> {
+    pub fn stop(self) -> CapturedAudio {
         let _ = self.shutdown.send(());
         let _ = self.thread.join();
-        self.buffer.drain()
+        CapturedAudio {
+            samples: self.buffer.drain(),
+            sample_rate: self.sample_rate,
+            channels: self.channels,
+        }
     }
 }
 

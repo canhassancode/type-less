@@ -1,7 +1,9 @@
 use std::mem;
 use std::sync::Mutex;
 
-pub type StopFn = Box<dyn FnOnce() -> Vec<f32> + Send>;
+use pipeline::audio::CapturedAudio;
+
+pub type StopFn = Box<dyn FnOnce() -> CapturedAudio + Send>;
 pub type AudioStartFn = Box<dyn Fn() -> Result<StopFn, SessionError> + Send + Sync>;
 pub type PasteFn = Box<dyn Fn(&str) -> Result<(), SessionError> + Send + Sync>;
 
@@ -78,7 +80,13 @@ mod tests {
     }
 
     fn fake_audio() -> impl Fn() -> Result<StopFn, SessionError> + Send + Sync + 'static {
-        || Ok(Box::new(|| vec![1.0, 2.0]))
+        || {
+            Ok(Box::new(|| CapturedAudio {
+                samples: vec![1.0, 2.0],
+                sample_rate: 16_000,
+                channels: 1,
+            }))
+        }
     }
 
     #[test]
