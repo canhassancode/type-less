@@ -1,0 +1,30 @@
+{
+  "name": "type-less",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local-first AI dictation tool",
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "tauri": "cd crates/tauri-shell && tauri",
+    "dev": "pnpm --filter @type-less/app dev",
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "@tauri-apps/cli": "^2.4.0",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  }
+}

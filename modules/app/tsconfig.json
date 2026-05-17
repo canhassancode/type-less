@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client"],
+    "noEmit": false
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../levelling" },
+    { "path": "../activation" },
+    { "path": "../theme-loader" }
+  ]
+}

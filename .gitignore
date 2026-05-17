@@ -1,0 +1,47 @@
+# Node
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+.npm/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Tauri
+crates/tauri-shell/gen/
+crates/tauri-shell/target/
+
+# Vitest
+coverage/
+.vitest-cache/
+
+# Vite
+.vite/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Local Claude state
+.claude/settings.local.json
