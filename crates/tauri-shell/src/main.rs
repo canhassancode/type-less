@@ -258,6 +258,7 @@ fn build_session(handles: EngineHandles) -> Session {
                 .map_err(|err| SessionError::Cleanup(err.to_string()))
         },
         |text| insertion::paste(text).map_err(|err| SessionError::Paste(err.to_string())),
+        |_event| {},
     )
 }
 

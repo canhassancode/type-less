@@ -9,6 +9,7 @@ pub type AudioStartFn = Box<dyn Fn() -> Result<StopFn, SessionError> + Send + Sy
 pub type AsrFn = Box<dyn Fn(&[f32]) -> Result<String, SessionError> + Send + Sync>;
 pub type CleanupFn = Box<dyn Fn(&str) -> Result<String, SessionError> + Send + Sync>;
 pub type PasteFn = Box<dyn Fn(&str) -> Result<(), SessionError> + Send + Sync>;
+pub type EventSinkFn = Box<dyn Fn(DictationEvent) + Send + Sync>;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SessionError {
@@ -22,6 +23,27 @@ pub enum SessionError {
     NotImplemented,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DictationStage {
+    Recording,
+    Loading,
+    Idle,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ErrorStage {
+    Asr,
+    Cleanup,
+    Paste,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DictationEvent {
+    StateChanged(DictationStage),
+    Completed { word_count: u32 },
+    Error { stage: ErrorStage, message: String },
+}
+
 enum SessionState {
     Idle,
     Active(StopFn),
@@ -33,6 +55,7 @@ pub struct Session {
     asr: AsrFn,
     cleanup: CleanupFn,
     paste: PasteFn,
+    sink: EventSinkFn,
 }
 
 impl Session {
@@ -41,6 +64,7 @@ impl Session {
         asr: impl Fn(&[f32]) -> Result<String, SessionError> + Send + Sync + 'static,
         cleanup: impl Fn(&str) -> Result<String, SessionError> + Send + Sync + 'static,
         paste: impl Fn(&str) -> Result<(), SessionError> + Send + Sync + 'static,
+        sink: impl Fn(DictationEvent) + Send + Sync + 'static,
     ) -> Self {
         Self {
             state: Mutex::new(SessionState::Idle),
@@ -48,6 +72,7 @@ impl Session {
             asr: Box::new(asr),
             cleanup: Box::new(cleanup),
             paste: Box::new(paste),
+            sink: Box::new(sink),
         }
     }
 
@@ -58,6 +83,8 @@ impl Session {
         }
         let stop_fn = (self.start_audio)()?;
         *state = SessionState::Active(stop_fn);
+        drop(state);
+        (self.sink)(DictationEvent::StateChanged(DictationStage::Recording));
         Ok(())
     }
 
@@ -69,12 +96,35 @@ impl Session {
         };
         drop(state);
 
+        (self.sink)(DictationEvent::StateChanged(DictationStage::Loading));
+
         let captured = stop_fn();
         let samples = to_whisper_format(captured);
-        let transcript = (self.asr)(&samples)?;
-        let cleaned = (self.cleanup)(&transcript)?;
-        (self.paste)(&cleaned)?;
-        Ok(())
+
+        let outcome = self.run_inference(&samples);
+        match outcome {
+            Ok(cleaned) => {
+                let word_count = cleaned.split_whitespace().count() as u32;
+                (self.sink)(DictationEvent::Completed { word_count });
+                (self.sink)(DictationEvent::StateChanged(DictationStage::Idle));
+                Ok(())
+            }
+            Err((stage, err)) => {
+                (self.sink)(DictationEvent::Error {
+                    stage,
+                    message: format!("{err:?}"),
+                });
+                (self.sink)(DictationEvent::StateChanged(DictationStage::Idle));
+                Err(err)
+            }
+        }
+    }
+
+    fn run_inference(&self, samples: &[f32]) -> Result<String, (ErrorStage, SessionError)> {
+        let transcript = (self.asr)(samples).map_err(|e| (ErrorStage::Asr, e))?;
+        let cleaned = (self.cleanup)(&transcript).map_err(|e| (ErrorStage::Cleanup, e))?;
+        (self.paste)(&cleaned).map_err(|e| (ErrorStage::Paste, e))?;
+        Ok(cleaned)
     }
 
     pub fn cancel(&self) -> Result<(), SessionError> {
@@ -86,6 +136,20 @@ impl Session {
 mod tests {
     use super::*;
     use std::sync::Arc;
+
+    fn no_events() -> impl Fn(DictationEvent) + Send + Sync + 'static {
+        |_event| {}
+    }
+
+    fn event_collector() -> (Arc<Mutex<Vec<DictationEvent>>>, impl Fn(DictationEvent) + Send + Sync + 'static)
+    {
+        let bus: Arc<Mutex<Vec<DictationEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let bus_for_sink = bus.clone();
+        let sink = move |event: DictationEvent| {
+            bus_for_sink.lock().expect("event bus poisoned").push(event);
+        };
+        (bus, sink)
+    }
 
     fn fake_paste(
         sink: Arc<Mutex<Vec<String>>>,
@@ -142,6 +206,7 @@ mod tests {
                 Ok("Hello, world.".into())
             }),
             fake_paste(pasted.clone()),
+            no_events(),
         );
 
         session.start().expect("start should succeed");
@@ -161,6 +226,7 @@ mod tests {
             fake_asr(|_samples| Err(SessionError::EngineNotReady("asr".into()))),
             ok_cleanup("should not be called"),
             fake_paste(pasted.clone()),
+            no_events(),
         );
 
         session.start().expect("start should succeed");
@@ -184,6 +250,7 @@ mod tests {
             ok_asr("hello world"),
             fake_cleanup(|_transcript| Err(SessionError::Cleanup("llama crashed".into()))),
             fake_paste(pasted.clone()),
+            no_events(),
         );
 
         session.start().expect("start should succeed");
@@ -207,6 +274,7 @@ mod tests {
             fake_asr(|_samples| Err(SessionError::Asr("whisper crashed".into()))),
             ok_cleanup("should not be called"),
             fake_paste(pasted.clone()),
+            no_events(),
         );
 
         session.start().expect("start should succeed");
@@ -230,6 +298,7 @@ mod tests {
             ok_asr("ignored"),
             ok_cleanup("ignored"),
             fake_paste(pasted),
+            no_events(),
         );
 
         session.start().expect("first start should succeed");
@@ -246,6 +315,7 @@ mod tests {
             ok_asr("ignored"),
             ok_cleanup("ignored"),
             fake_paste(pasted.clone()),
+            no_events(),
         );
 
         let result = session.stop();
@@ -262,6 +332,7 @@ mod tests {
             ok_asr("ignored"),
             ok_cleanup("ignored"),
             fake_paste(pasted),
+            no_events(),
         );
 
         let first = session.start();
@@ -282,6 +353,7 @@ mod tests {
             ok_asr("hello world"),
             ok_cleanup("Hello, world."),
             |_text: &str| Err(SessionError::Paste("clipboard locked".into())),
+            no_events(),
         );
 
         session.start().expect("start should succeed");
@@ -301,11 +373,233 @@ mod tests {
             ok_asr("ignored"),
             ok_cleanup("ignored"),
             fake_paste(pasted),
+            no_events(),
         );
 
         let result = session.cancel();
 
         assert_eq!(result, Err(SessionError::NotImplemented));
+    }
+
+    #[test]
+    fn happy_path_emits_recording_loading_completed_idle_in_order() {
+        let pasted: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let (events, sink) = event_collector();
+        let session = Session::new(
+            fake_audio(),
+            ok_asr("hello world"),
+            ok_cleanup("Hello, world."),
+            fake_paste(pasted),
+            sink,
+        );
+
+        session.start().expect("start should succeed");
+        session.stop().expect("stop should succeed");
+
+        let recorded = events.lock().expect("event bus poisoned").clone();
+        assert_eq!(
+            recorded,
+            vec![
+                DictationEvent::StateChanged(DictationStage::Recording),
+                DictationEvent::StateChanged(DictationStage::Loading),
+                DictationEvent::Completed { word_count: 2 },
+                DictationEvent::StateChanged(DictationStage::Idle),
+            ],
+        );
+    }
+
+    #[test]
+    fn asr_failure_emits_error_then_idle_with_no_completed() {
+        let pasted: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let (events, sink) = event_collector();
+        let session = Session::new(
+            fake_audio(),
+            fake_asr(|_samples| Err(SessionError::Asr("whisper crashed".into()))),
+            ok_cleanup("unused"),
+            fake_paste(pasted),
+            sink,
+        );
+
+        session.start().expect("start should succeed");
+        let _ = session.stop();
+
+        let recorded = events.lock().expect("event bus poisoned").clone();
+        assert_eq!(
+            recorded,
+            vec![
+                DictationEvent::StateChanged(DictationStage::Recording),
+                DictationEvent::StateChanged(DictationStage::Loading),
+                DictationEvent::Error {
+                    stage: ErrorStage::Asr,
+                    message: "Asr(\"whisper crashed\")".into(),
+                },
+                DictationEvent::StateChanged(DictationStage::Idle),
+            ],
+        );
+    }
+
+    #[test]
+    fn cleanup_failure_emits_error_then_idle_with_no_completed() {
+        let pasted: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let (events, sink) = event_collector();
+        let session = Session::new(
+            fake_audio(),
+            ok_asr("hello world"),
+            fake_cleanup(|_t| Err(SessionError::Cleanup("llama crashed".into()))),
+            fake_paste(pasted),
+            sink,
+        );
+
+        session.start().expect("start should succeed");
+        let _ = session.stop();
+
+        let recorded = events.lock().expect("event bus poisoned").clone();
+        assert_eq!(
+            recorded,
+            vec![
+                DictationEvent::StateChanged(DictationStage::Recording),
+                DictationEvent::StateChanged(DictationStage::Loading),
+                DictationEvent::Error {
+                    stage: ErrorStage::Cleanup,
+                    message: "Cleanup(\"llama crashed\")".into(),
+                },
+                DictationEvent::StateChanged(DictationStage::Idle),
+            ],
+        );
+    }
+
+    #[test]
+    fn paste_failure_emits_error_then_idle_with_no_completed() {
+        let (events, sink) = event_collector();
+        let session = Session::new(
+            fake_audio(),
+            ok_asr("hello world"),
+            ok_cleanup("Hello, world."),
+            |_text: &str| Err(SessionError::Paste("clipboard locked".into())),
+            sink,
+        );
+
+        session.start().expect("start should succeed");
+        let _ = session.stop();
+
+        let recorded = events.lock().expect("event bus poisoned").clone();
+        assert_eq!(
+            recorded,
+            vec![
+                DictationEvent::StateChanged(DictationStage::Recording),
+                DictationEvent::StateChanged(DictationStage::Loading),
+                DictationEvent::Error {
+                    stage: ErrorStage::Paste,
+                    message: "Paste(\"clipboard locked\")".into(),
+                },
+                DictationEvent::StateChanged(DictationStage::Idle),
+            ],
+        );
+    }
+
+    #[test]
+    fn already_active_on_start_emits_no_events() {
+        let pasted: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let (events, sink) = event_collector();
+        let session = Session::new(
+            fake_audio(),
+            ok_asr("ignored"),
+            ok_cleanup("ignored"),
+            fake_paste(pasted),
+            sink,
+        );
+
+        session.start().expect("first start should succeed");
+        let before_second = events.lock().expect("event bus poisoned").len();
+        let second = session.start();
+        let after_second = events.lock().expect("event bus poisoned").len();
+
+        assert_eq!(second, Err(SessionError::AlreadyActive));
+        assert_eq!(
+            after_second, before_second,
+            "AlreadyActive must not emit any events",
+        );
+    }
+
+    #[test]
+    fn not_active_on_stop_emits_no_events() {
+        let pasted: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let (events, sink) = event_collector();
+        let session = Session::new(
+            fake_audio(),
+            ok_asr("ignored"),
+            ok_cleanup("ignored"),
+            fake_paste(pasted),
+            sink,
+        );
+
+        let result = session.stop();
+
+        assert_eq!(result, Err(SessionError::NotActive));
+        assert!(
+            events.lock().expect("event bus poisoned").is_empty(),
+            "NotActive must not emit any events",
+        );
+    }
+
+    #[test]
+    fn engine_not_ready_asr_emits_asr_error_event() {
+        let pasted: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let (events, sink) = event_collector();
+        let session = Session::new(
+            fake_audio(),
+            fake_asr(|_s| Err(SessionError::EngineNotReady("asr".into()))),
+            ok_cleanup("unused"),
+            fake_paste(pasted),
+            sink,
+        );
+
+        session.start().expect("start should succeed");
+        let _ = session.stop();
+
+        let recorded = events.lock().expect("event bus poisoned").clone();
+        assert_eq!(
+            recorded,
+            vec![
+                DictationEvent::StateChanged(DictationStage::Recording),
+                DictationEvent::StateChanged(DictationStage::Loading),
+                DictationEvent::Error {
+                    stage: ErrorStage::Asr,
+                    message: "EngineNotReady(\"asr\")".into(),
+                },
+                DictationEvent::StateChanged(DictationStage::Idle),
+            ],
+        );
+    }
+
+    #[test]
+    fn engine_not_ready_cleanup_emits_cleanup_error_event() {
+        let pasted: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let (events, sink) = event_collector();
+        let session = Session::new(
+            fake_audio(),
+            ok_asr("hello world"),
+            fake_cleanup(|_t| Err(SessionError::EngineNotReady("cleanup".into()))),
+            fake_paste(pasted),
+            sink,
+        );
+
+        session.start().expect("start should succeed");
+        let _ = session.stop();
+
+        let recorded = events.lock().expect("event bus poisoned").clone();
+        assert_eq!(
+            recorded,
+            vec![
+                DictationEvent::StateChanged(DictationStage::Recording),
+                DictationEvent::StateChanged(DictationStage::Loading),
+                DictationEvent::Error {
+                    stage: ErrorStage::Cleanup,
+                    message: "EngineNotReady(\"cleanup\")".into(),
+                },
+                DictationEvent::StateChanged(DictationStage::Idle),
+            ],
+        );
     }
 
     #[test]
@@ -316,6 +610,7 @@ mod tests {
             ok_asr("hello world"),
             ok_cleanup("Hello, world."),
             fake_paste(pasted.clone()),
+            no_events(),
         );
 
         session.start().expect("first start");
