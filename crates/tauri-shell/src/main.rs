@@ -51,8 +51,6 @@ pub struct ModelDownloadFailed {
     pub message: String,
 }
 
-const TRACER_PASTE_TEXT: &str = "Hello, type-less!";
-
 #[tauri::command]
 #[specta::specta]
 fn show_settings(app: AppHandle) -> Result<(), String> {
@@ -99,9 +97,7 @@ fn start_dictation_session(app: AppHandle, state: State<'_, Session>) -> Result<
 #[tauri::command]
 #[specta::specta]
 fn end_dictation_session(app: AppHandle, state: State<'_, Session>) -> Result<(), String> {
-    let stop_result = state
-        .stop(TRACER_PASTE_TEXT)
-        .map_err(|err| format!("{err:?}"));
+    let stop_result = state.stop().map_err(|err| format!("{err:?}"));
     let _ = set_pill_visible(&app, false);
     stop_result
 }
@@ -234,6 +230,8 @@ fn build_session() -> Session {
                 .map(|audio| Box::new(move || audio.stop()) as StopFn)
                 .map_err(|err| SessionError::Audio(err.to_string()))
         },
+        |_samples| Err(SessionError::Asr("engines not yet wired".into())),
+        |_transcript| Err(SessionError::Cleanup("engines not yet wired".into())),
         |text| insertion::paste(text).map_err(|err| SessionError::Paste(err.to_string())),
     )
 }
