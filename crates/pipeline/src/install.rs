@@ -33,6 +33,7 @@ pub fn has_disk_space(path: &Path, needed_bytes: u64) -> Result<bool, InstallErr
     Ok(available >= needed_bytes)
 }
 
+#[derive(Debug)]
 pub struct DownloadSink {
     writer: BufWriter<File>,
     hasher: Sha256,
