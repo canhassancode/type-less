@@ -11,6 +11,7 @@ pub enum SessionError {
     NotActive,
     Audio(String),
     Paste(String),
+    NotImplemented,
 }
 
 enum SessionState {
@@ -55,6 +56,10 @@ impl Session {
         let _pcm = stop_fn();
         (self.paste)(text)?;
         Ok(())
+    }
+
+    pub fn cancel(&self) -> Result<(), SessionError> {
+        Err(SessionError::NotImplemented)
     }
 }
 
@@ -145,6 +150,16 @@ mod tests {
         session
             .start()
             .expect("session must be Idle after paste failure so the next start succeeds");
+    }
+
+    #[test]
+    fn cancel_returns_not_implemented_pending_slice_6() {
+        let pasted: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let session = Session::new(fake_audio(), fake_paste(pasted));
+
+        let result = session.cancel();
+
+        assert_eq!(result, Err(SessionError::NotImplemented));
     }
 
     #[test]

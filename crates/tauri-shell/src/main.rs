@@ -67,6 +67,12 @@ fn end_dictation_session(app: AppHandle, state: State<'_, Session>) -> Result<()
     stop_result
 }
 
+#[tauri::command]
+#[specta::specta]
+fn cancel_dictation_session(state: State<'_, Session>) -> Result<(), String> {
+    state.cancel().map_err(|err| format!("{err:?}"))
+}
+
 fn set_pill_visible(app: &AppHandle, visible: bool) -> Result<(), String> {
     let window = window(app, "pill")?;
     if visible {
@@ -107,6 +113,7 @@ fn main() {
         hide_overlay,
         start_dictation_session,
         end_dictation_session,
+        cancel_dictation_session,
     ]);
 
     #[cfg(debug_assertions)]
