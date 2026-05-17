@@ -2677,6 +2677,7 @@ dependencies = [
  "rubato",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "whisper-rs",
 ]
 

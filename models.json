@@ -1,0 +1,20 @@
+{
+  "models": [
+    {
+      "id": "whisper-small-en",
+      "purpose": "asr",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size_bytes": 487601967,
+      "filename": "ggml-small.en.bin"
+    },
+    {
+      "id": "qwen2.5-1.5b-instruct-q4-k-m",
+      "purpose": "cleanup",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size_bytes": 1117320000,
+      "filename": "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+    }
+  ]
+}
