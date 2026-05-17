@@ -214,7 +214,11 @@ fn run_cleanup(
     ctx.clear_kv_cache_seq(Some(1), None, None)
         .map_err(|e| CleanupError::Cleanup(format!("clear_kv_cache_seq: {e}")))?;
 
-    Ok(String::from_utf8_lossy(&output_bytes).trim().to_string())
+    let trimmed = String::from_utf8_lossy(&output_bytes).trim().to_string();
+    if !trimmed.chars().any(|c| c.is_alphanumeric()) {
+        return Ok(String::new());
+    }
+    Ok(trimmed)
 }
 
 #[cfg(test)]
@@ -275,6 +279,72 @@ mod tests {
         assert!(
             out.starts_with('H'),
             "must capitalise sentence start, got: {out:?}",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn lock_e1_empty_input_returns_empty() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let out = engine
+            .cleanup("um uh")
+            .expect("cleanup filler-only input");
+
+        eprintln!("E1#6 filler-only → {out:?}");
+        assert!(
+            out.trim().is_empty(),
+            "filler-only input must yield empty output, got: {out:?}",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn lock_e1_homophones_their_there() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let out = engine
+            .cleanup("their going to the store there are three of them")
+            .expect("cleanup homophone input");
+
+        eprintln!("E1#3 homophones → {out:?}");
+        assert!(
+            out.contains("They're"),
+            "'their' → 'They're' (homophone fix), got: {out:?}",
+        );
+        assert!(
+            out.contains("There"),
+            "'there' kept as 'There', got: {out:?}",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn lock_e1_filler_um_removed() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let out = engine
+            .cleanup("um so I was thinking we should ship the feature tomorrow")
+            .expect("cleanup filler-prefixed input");
+
+        eprintln!("E1#2 um filler → {out:?}");
+        let lower = out.to_lowercase();
+        assert!(
+            !lower.starts_with("um") && !lower.contains(" um "),
+            "'um' filler must be removed, got: {out:?}",
+        );
+        assert!(
+            lower.contains("ship the feature"),
+            "speaker's content must survive cleanup, got: {out:?}",
         );
     }
 }
