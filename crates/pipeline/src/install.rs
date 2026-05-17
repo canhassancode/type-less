@@ -102,6 +102,14 @@ impl DownloadSink {
         std::fs::rename(&self.partial_path, final_path)?;
         Ok(())
     }
+
+    pub fn finalise_recording_sha(mut self, final_path: &Path) -> Result<String, InstallError> {
+        self.writer.flush()?;
+        drop(self.writer);
+        let actual = hex_digest(self.hasher);
+        std::fs::rename(&self.partial_path, final_path)?;
+        Ok(actual)
+    }
 }
 
 fn hex_digest(hasher: Sha256) -> String {
@@ -203,6 +211,24 @@ mod tests {
         assert!(matches!(err, InstallError::ChecksumMismatch { .. }));
         assert!(partial.exists(), "partial must survive sha mismatch for inspection");
         assert!(!final_path.exists(), "final path must not be created on mismatch");
+    }
+
+    #[test]
+    fn finalise_recording_sha_renames_and_returns_actual_digest() {
+        let dir = TempDir::new().unwrap();
+        let partial = dir.path().join("model.bin.partial");
+        let final_path = dir.path().join("model.bin");
+        let bytes = b"bootstrap-payload-bytes";
+        let expected = known_sha256_of(bytes);
+
+        let mut sink = DownloadSink::create(partial.clone()).unwrap();
+        sink.write_chunk(bytes).unwrap();
+        let recorded = sink.finalise_recording_sha(&final_path).unwrap();
+
+        assert_eq!(recorded, expected);
+        assert!(!partial.exists());
+        assert!(final_path.exists());
+        assert_eq!(fs::read(&final_path).unwrap(), bytes);
     }
 
     #[test]
