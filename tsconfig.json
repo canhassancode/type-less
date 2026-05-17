@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./modules/levelling" },
+    { "path": "./modules/activation" },
+    { "path": "./modules/theme-loader" },
+    { "path": "./modules/app" }
+  ]
+}

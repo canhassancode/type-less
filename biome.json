@@ -6,7 +6,15 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/dist", "!**/target", "!**/.vite", "!**/coverage"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/target",
+      "!**/.vite",
+      "!**/coverage",
+      "!**/*.tsbuildinfo"
+    ]
   },
   "formatter": {
     "enabled": true,
