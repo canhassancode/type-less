@@ -10,5 +10,12 @@ publish = false
 name = "eval"
 path = "src/main.rs"
 
+[[bin]]
+name = "bootstrap-models"
+path = "src/bin/bootstrap-models.rs"
+
 [dependencies]
 pipeline = { path = "../pipeline" }
+dirs = "6"
+serde_json = "1"
+sha2 = "0.10"

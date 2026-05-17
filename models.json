@@ -4,16 +4,16 @@
       "id": "whisper-small-en",
       "purpose": "asr",
       "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "size_bytes": 487601967,
+      "sha256": "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
+      "size_bytes": 487614201,
       "filename": "ggml-small.en.bin"
     },
     {
       "id": "qwen2.5-1.5b-instruct-q4-k-m",
       "purpose": "cleanup",
       "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "size_bytes": 1117320000,
+      "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+      "size_bytes": 1117320736,
       "filename": "qwen2.5-1.5b-instruct-q4_k_m.gguf"
     }
   ]
