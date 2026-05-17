@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use pipeline::download::stream_to_sink;
 use pipeline::install::{DownloadSink, InstallationState, check_installation, has_disk_space};
-use pipeline::models::Registry;
+use pipeline::models::{Model, Registry};
 use serde::Serialize;
 use specta::Type;
 use specta_typescript::{BigIntExportBehavior, Typescript};
@@ -118,6 +118,12 @@ fn installation_status(app: AppHandle) -> Result<InstallationState, String> {
     let registry = parse_registry()?;
     let dir = models_dir(&app)?;
     Ok(check_installation(&registry, &dir))
+}
+
+#[tauri::command]
+#[specta::specta]
+fn list_models() -> Result<Vec<Model>, String> {
+    Ok(parse_registry()?.models)
 }
 
 #[tauri::command]
@@ -244,6 +250,7 @@ fn main() {
             end_dictation_session,
             cancel_dictation_session,
             installation_status,
+            list_models,
             download_model,
         ])
         .events(collect_events![

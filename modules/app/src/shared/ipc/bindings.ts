@@ -77,6 +77,14 @@ async installationStatus() : Promise<Result<InstallationState, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async listModels() : Promise<Result<Model[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_models") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async downloadModel(modelId: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("download_model", { modelId }) };
@@ -107,10 +115,12 @@ modelDownloadProgress: "model-download-progress"
 /** user-defined types **/
 
 export type InstallationState = { items: ([string, ModelStatus])[] }
+export type Model = { id: string; purpose: Purpose; url: string; sha256: string; size_bytes: number; filename: string }
 export type ModelDownloadCompleted = { model_id: string }
 export type ModelDownloadFailed = { model_id: string; message: string }
 export type ModelDownloadProgress = { model_id: string; downloaded: number; total: number }
 export type ModelStatus = "not_installed" | "installed" | "checksum_mismatch"
+export type Purpose = "asr" | "cleanup"
 
 /** tauri-specta globals **/
 
