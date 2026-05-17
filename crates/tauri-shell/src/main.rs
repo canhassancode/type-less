@@ -18,7 +18,7 @@ use tauri::{AppHandle, Manager, State, WindowEvent};
 use tauri_plugin_positioner::{Position, WindowExt};
 use tauri_specta::{Builder, Event, collect_commands, collect_events};
 
-use engines::{EngineHandles, spawn_loaders};
+use engines::{EngineHandles, load_asr_from, load_cleanup_from, spawn_loaders};
 use session::{Session, SessionError, StopFn};
 
 const MODELS_JSON: &str = include_str!("../../../models.json");
@@ -361,9 +361,9 @@ fn main() {
             match models_dir(app_handle) {
                 Ok(dir) => spawn_loaders(
                     handles_for_loaders.clone(),
-                    dir.join(ASR_MODEL_FILENAME),
-                    dir.join(CLEANUP_MODEL_FILENAME),
-                    CLEANUP_PROMPT,
+                    load_asr_from(dir.join(ASR_MODEL_FILENAME)),
+                    load_cleanup_from(dir.join(CLEANUP_MODEL_FILENAME), CLEANUP_PROMPT),
+                    std::sync::Arc::new(|state| eprintln!("[engines] state: {state:?}")),
                 ),
                 Err(err) => eprintln!("[engines] could not resolve models_dir: {err}"),
             }
