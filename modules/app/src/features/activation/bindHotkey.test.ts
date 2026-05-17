@@ -36,7 +36,7 @@ describe('bindHotkey', () => {
   test('swallows handler errors and logs them so the listener survives', async () => {
     const { register, handler } = makeRegisterCapture();
     const unregister = vi.fn(async () => {});
-    const failure = new Error('start_session rejected');
+    const failure = new Error('start_dictation_session rejected');
     const onPress = vi.fn(async () => {
       throw failure;
     });

@@ -52,14 +52,14 @@ fn hide_overlay(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 #[specta::specta]
-fn start_session(app: AppHandle, state: State<'_, Session>) -> Result<(), String> {
+fn start_dictation_session(app: AppHandle, state: State<'_, Session>) -> Result<(), String> {
     state.start().map_err(|err| format!("{err:?}"))?;
     set_pill_visible(&app, true)
 }
 
 #[tauri::command]
 #[specta::specta]
-fn stop_session(app: AppHandle, state: State<'_, Session>) -> Result<(), String> {
+fn end_dictation_session(app: AppHandle, state: State<'_, Session>) -> Result<(), String> {
     let stop_result = state
         .stop(TRACER_PASTE_TEXT)
         .map_err(|err| format!("{err:?}"));
@@ -105,8 +105,8 @@ fn main() {
         show_overlay,
         hide_pill,
         hide_overlay,
-        start_session,
-        stop_session,
+        start_dictation_session,
+        end_dictation_session,
     ]);
 
     #[cfg(debug_assertions)]

@@ -45,17 +45,17 @@ async hideOverlay() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async startSession() : Promise<Result<null, string>> {
+async startDictationSession() : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("start_session") };
+    return { status: "ok", data: await TAURI_INVOKE("start_dictation_session") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
-async stopSession() : Promise<Result<null, string>> {
+async endDictationSession() : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("stop_session") };
+    return { status: "ok", data: await TAURI_INVOKE("end_dictation_session") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
