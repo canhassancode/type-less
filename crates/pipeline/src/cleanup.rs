@@ -214,11 +214,39 @@ fn run_cleanup(
     ctx.clear_kv_cache_seq(Some(1), None, None)
         .map_err(|e| CleanupError::Cleanup(format!("clear_kv_cache_seq: {e}")))?;
 
-    let trimmed = String::from_utf8_lossy(&output_bytes).trim().to_string();
-    if !trimmed.chars().any(|c| c.is_alphanumeric()) {
+    let raw = String::from_utf8_lossy(&output_bytes).trim().to_string();
+    let unfenced = strip_code_fence(&raw);
+    let unwrapped = strip_outer_quotes(unfenced);
+    if !unwrapped.chars().any(|c| c.is_alphanumeric()) {
         return Ok(String::new());
     }
-    Ok(trimmed)
+    Ok(unwrapped.to_string())
+}
+
+fn strip_outer_quotes(s: &str) -> &str {
+    let stripped = s
+        .strip_prefix('"')
+        .and_then(|inner| inner.strip_suffix('"'));
+    match stripped {
+        Some(inner) if !inner.contains('"') => inner,
+        _ => s,
+    }
+}
+
+fn strip_code_fence(s: &str) -> &str {
+    let trimmed = s.trim();
+    let Some(after_open) = trimmed.strip_prefix("```") else {
+        return trimmed;
+    };
+    let Some(closing) = trimmed.strip_suffix("```") else {
+        return trimmed;
+    };
+    let _ = closing;
+    let body = match after_open.split_once('\n') {
+        Some((_lang, rest)) => rest,
+        None => after_open,
+    };
+    body.trim_end_matches('`').trim()
 }
 
 #[cfg(test)]
@@ -284,6 +312,95 @@ mod tests {
 
     #[test]
     #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn exploration_e3_long_form() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let input = "so I was thinking about the new dictation pipeline and how we should approach the cleanup stage \
+                     the idea is that we run whisper for transcription and then pipe the raw transcript through \
+                     a smaller language model that strips fillers and fixes basic punctuation things like commas \
+                     periods and capitalisation we want the whole thing to feel instant so the latency budget \
+                     is under one second from key release to paste landing anyway on a separate note I also want \
+                     to make sure that we get the speechcraft levelling system right because that is the signature \
+                     flourish of the product without it we are just another dictation tool with the levelling \
+                     and the overlay we have something that feels like a game and that emotional reward is what \
+                     keeps users coming back even when the model itself is not perfect";
+        let input_words = input.split_whitespace().count();
+
+        let out = engine.cleanup(input).expect("cleanup long-form input");
+        let out_words = out.split_whitespace().count();
+
+        eprintln!("E3 long-form ({input_words} words in / {out_words} words out) → {out:?}");
+        assert!(
+            out_words >= (input_words * 7 / 10) && out_words <= (input_words * 13 / 10),
+            "long-form output word count {out_words} drifted outside 70-130% of input {input_words}",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn exploration_e4_restart_preserved() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let out = engine
+            .cleanup("the meeting is at three actually four")
+            .expect("cleanup restart input");
+
+        eprintln!("E4#13 restart → {out:?}");
+        let lower = out.to_lowercase();
+        assert!(
+            lower.contains("three") && lower.contains("four"),
+            "restart should keep both 'three' and 'four', got: {out:?}",
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn exploration_e5_numbers() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let inputs = [
+            "the timeout is three hundred and forty two milliseconds",
+            "lets meet on march fifteenth at two pm",
+            "the file is about five hundred megabytes",
+        ];
+        for input in inputs {
+            let out = engine.cleanup(input).expect("cleanup number input");
+            eprintln!("E5 numbers input={input:?} → {out:?}");
+            assert!(!out.is_empty(), "number-bearing input must produce output");
+        }
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
+    fn exploration_e6_technical_vocab() {
+        let Some(engine) = load_engine() else {
+            eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
+            return;
+        };
+
+        let inputs = [
+            "the function check user auth returns a boolean",
+            "the api endpoint is slash v one slash users",
+            "import react from react",
+        ];
+        for input in inputs {
+            let out = engine.cleanup(input).expect("cleanup technical input");
+            eprintln!("E6 tech input={input:?} → {out:?}");
+            assert!(!out.is_empty(), "technical input must produce output");
+        }
+    }
+
+    #[test]
+    #[ignore = "requires real qwen model on disk; run with --ignored"]
     fn lock_e9_no_failure_surfaces() {
         let Some(engine) = load_engine() else {
             eprintln!("skipping: qwen model not on disk; run `pnpm bootstrap:models`");
@@ -295,6 +412,8 @@ mod tests {
             "yeah you know its really good",
             "the meeting is at three actually four",
             "we use postgres on aws",
+            "import react from react",
+            "she said the file is read only",
         ];
 
         let banned_preambles = [
