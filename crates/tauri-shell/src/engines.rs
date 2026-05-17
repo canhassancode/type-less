@@ -5,6 +5,8 @@ use std::thread;
 
 use pipeline::asr::AsrEngine;
 use pipeline::cleanup::CleanupEngine;
+use serde::Serialize;
+use specta::Type;
 
 #[derive(Clone, Default)]
 pub struct EngineHandles {
@@ -26,7 +28,7 @@ impl EngineHandles {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub enum EngineState {
     Loading,
     Ready,

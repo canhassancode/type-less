@@ -6,6 +6,7 @@ mod platform;
 mod session;
 
 use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
 
 use pipeline::download::stream_to_sink;
 use pipeline::install::{DownloadSink, InstallationState, check_installation, has_disk_space};
@@ -18,8 +19,8 @@ use tauri::{AppHandle, Manager, State, WindowEvent};
 use tauri_plugin_positioner::{Position, WindowExt};
 use tauri_specta::{Builder, Event, collect_commands, collect_events};
 
-use engines::{EngineHandles, load_asr_from, load_cleanup_from, spawn_loaders};
-use session::{Session, SessionError, StopFn};
+use engines::{EngineHandles, EngineState, load_asr_from, load_cleanup_from, spawn_loaders};
+use session::{DictationEvent, DictationStage, ErrorStage, Session, SessionError, StopFn};
 
 const MODELS_JSON: &str = include_str!("../../../models.json");
 const DOWNLOAD_DISK_HEADROOM_BYTES: u64 = 1024 * 1024 * 1024;
@@ -54,6 +55,41 @@ pub struct ModelDownloadCompleted {
 pub struct ModelDownloadFailed {
     pub model_id: String,
     pub message: String,
+}
+
+#[derive(Clone, Serialize, Type, Event)]
+pub struct DictationStateChanged {
+    pub stage: DictationStage,
+}
+
+#[derive(Clone, Serialize, Type, Event)]
+pub struct DictationCompleted {
+    pub word_count: u32,
+}
+
+#[derive(Clone, Serialize, Type, Event)]
+pub struct DictationError {
+    pub stage: ErrorStage,
+    pub message: String,
+}
+
+#[derive(Clone, Serialize, Type, Event)]
+pub struct EngineStateChanged {
+    pub state: EngineState,
+}
+
+fn emit_dictation_event(app: &AppHandle, event: DictationEvent) {
+    match event {
+        DictationEvent::StateChanged(stage) => {
+            let _ = DictationStateChanged { stage }.emit(app);
+        }
+        DictationEvent::Completed { word_count } => {
+            let _ = DictationCompleted { word_count }.emit(app);
+        }
+        DictationEvent::Error { stage, message } => {
+            let _ = DictationError { stage, message }.emit(app);
+        }
+    }
 }
 
 #[tauri::command]
@@ -101,10 +137,16 @@ fn start_dictation_session(app: AppHandle, state: State<'_, Session>) -> Result<
 
 #[tauri::command]
 #[specta::specta]
-fn end_dictation_session(app: AppHandle, state: State<'_, Session>) -> Result<(), String> {
-    let stop_result = state.stop().map_err(|err| format!("{err:?}"));
-    let _ = set_pill_visible(&app, false);
-    stop_result
+async fn end_dictation_session(app: AppHandle) -> Result<(), String> {
+    let app_for_task = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let session: State<Session> = app_for_task.state();
+        if let Err(err) = session.stop() {
+            eprintln!("[dictation] stop failed: {err:?}");
+        }
+        let _ = set_pill_visible(&app_for_task, false);
+    });
+    Ok(())
 }
 
 #[tauri::command]
@@ -232,7 +274,7 @@ fn stringify<E: std::fmt::Display>(error: E) -> String {
     error.to_string()
 }
 
-fn build_session(handles: EngineHandles) -> Session {
+fn build_session(handles: EngineHandles, app_slot: Arc<OnceLock<AppHandle>>) -> Session {
     let asr_handles = handles.clone();
     let cleanup_handles = handles;
     Session::new(
@@ -258,7 +300,11 @@ fn build_session(handles: EngineHandles) -> Session {
                 .map_err(|err| SessionError::Cleanup(err.to_string()))
         },
         |text| insertion::paste(text).map_err(|err| SessionError::Paste(err.to_string())),
-        |_event| {},
+        move |event| {
+            if let Some(app) = app_slot.get() {
+                emit_dictation_event(app, event);
+            }
+        },
     )
 }
 
@@ -281,6 +327,10 @@ fn main() {
             ModelDownloadProgress,
             ModelDownloadCompleted,
             ModelDownloadFailed,
+            DictationStateChanged,
+            DictationCompleted,
+            DictationError,
+            EngineStateChanged,
         ]);
 
     #[cfg(debug_assertions)]
@@ -303,13 +353,15 @@ fn main() {
 
     let engine_handles = EngineHandles::new();
     let handles_for_loaders = engine_handles.clone();
+    let app_handle_slot: Arc<OnceLock<AppHandle>> = Arc::new(OnceLock::new());
+    let slot_for_setup = app_handle_slot.clone();
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(engine_handles.clone())
-        .manage(build_session(engine_handles))
+        .manage(build_session(engine_handles, app_handle_slot))
         .invoke_handler(builder.invoke_handler())
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -319,7 +371,10 @@ fn main() {
                 }
             }
         })
-        .setup(|app| {
+        .setup(move |app| {
+            builder.mount_events(app);
+            let _ = slot_for_setup.set(app.handle().clone());
+
             if let Some(pill) = app.get_webview_window("pill") {
                 pill.set_ignore_cursor_events(true)?;
             }
@@ -359,12 +414,18 @@ fn main() {
     app.run(move |app_handle, event| {
         if matches!(event, tauri::RunEvent::Ready) {
             match models_dir(app_handle) {
-                Ok(dir) => spawn_loaders(
-                    handles_for_loaders.clone(),
-                    load_asr_from(dir.join(ASR_MODEL_FILENAME)),
-                    load_cleanup_from(dir.join(CLEANUP_MODEL_FILENAME), CLEANUP_PROMPT),
-                    std::sync::Arc::new(|state| eprintln!("[engines] state: {state:?}")),
-                ),
+                Ok(dir) => {
+                    let app_for_engine_sink = app_handle.clone();
+                    spawn_loaders(
+                        handles_for_loaders.clone(),
+                        load_asr_from(dir.join(ASR_MODEL_FILENAME)),
+                        load_cleanup_from(dir.join(CLEANUP_MODEL_FILENAME), CLEANUP_PROMPT),
+                        Arc::new(move |state| {
+                            eprintln!("[engines] state: {state:?}");
+                            let _ = EngineStateChanged { state }.emit(&app_for_engine_sink);
+                        }),
+                    );
+                }
                 Err(err) => eprintln!("[engines] could not resolve models_dir: {err}"),
             }
         }

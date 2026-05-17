@@ -99,10 +99,18 @@ async downloadModel(modelId: string) : Promise<Result<null, string>> {
 
 
 export const events = __makeEvents__<{
+dictationCompleted: DictationCompleted,
+dictationError: DictationError,
+dictationStateChanged: DictationStateChanged,
+engineStateChanged: EngineStateChanged,
 modelDownloadCompleted: ModelDownloadCompleted,
 modelDownloadFailed: ModelDownloadFailed,
 modelDownloadProgress: ModelDownloadProgress
 }>({
+dictationCompleted: "dictation-completed",
+dictationError: "dictation-error",
+dictationStateChanged: "dictation-state-changed",
+engineStateChanged: "engine-state-changed",
 modelDownloadCompleted: "model-download-completed",
 modelDownloadFailed: "model-download-failed",
 modelDownloadProgress: "model-download-progress"
@@ -114,6 +122,13 @@ modelDownloadProgress: "model-download-progress"
 
 /** user-defined types **/
 
+export type DictationCompleted = { word_count: number }
+export type DictationError = { stage: ErrorStage; message: string }
+export type DictationStage = "Recording" | "Loading" | "Idle"
+export type DictationStateChanged = { stage: DictationStage }
+export type EngineState = "Loading" | "Ready" | "Degraded"
+export type EngineStateChanged = { state: EngineState }
+export type ErrorStage = "Asr" | "Cleanup" | "Paste"
 export type InstallationState = { items: ([string, ModelStatus])[] }
 export type Model = { id: string; purpose: Purpose; url: string; sha256: string; size_bytes: number; filename: string }
 export type ModelDownloadCompleted = { model_id: string }

@@ -3,6 +3,8 @@ use std::sync::Mutex;
 
 use pipeline::audio::CapturedAudio;
 use pipeline::resample::to_whisper_format;
+use serde::Serialize;
+use specta::Type;
 
 pub type StopFn = Box<dyn FnOnce() -> CapturedAudio + Send>;
 pub type AudioStartFn = Box<dyn Fn() -> Result<StopFn, SessionError> + Send + Sync>;
@@ -23,14 +25,14 @@ pub enum SessionError {
     NotImplemented,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub enum DictationStage {
     Recording,
     Loading,
     Idle,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub enum ErrorStage {
     Asr,
     Cleanup,
