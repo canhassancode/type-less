@@ -15,7 +15,7 @@ The element that receives the cleaned text — defined by **keyboard focus**, no
 _Avoid_: Cursor (overloaded — colloquially means mouse pointer; we never mean the mouse), caret position
 
 **Activation Mode**:
-How the user starts and stops a **Dictation Session**. Two modes are supported: **Push-to-Talk** and **Toggle**. A single hotkey supports both via gesture — hold for Push-to-Talk, double-tap to enter Toggle, single-tap-while-toggled to end Toggle.
+How the user starts and stops a **Dictation Session**. Two modes are supported: **Push-to-Talk** and **Toggle**. A single hotkey supports both via gesture — hold for Push-to-Talk, double-tap to enter Toggle, single-tap-while-toggled to end Toggle. The hotkey is registered only while the **ASR** and **Cleanup** engines are loaded and the model files are present and verified; outside that state, the hotkey does nothing.
 _Avoid_: Trigger mode, recording mode
 
 **Push-to-Talk**:
@@ -57,7 +57,7 @@ _Avoid_: App menu, menu bar (ambiguous on its own)
 ### Recording feedback
 
 **Pill**:
-A floating, always-on-top, transparent, click-through indicator anchored at bottom-centre of the **Focused Display**. The continuous feedback channel for **Dictation Session** state. Distinct from the **Menu-bar Tray Icon** (affordance, not indication) and the **Overlay** (ephemeral celebration). Cycles: Hidden → Slit (idle) → Expanded with live waveform during a session → Loading during Cleanup → Slit/Hidden after paste.
+A floating, always-on-top, transparent, click-through indicator anchored at bottom-centre of the **Focused Display**. The continuous feedback channel for **Dictation Session** state. Distinct from the **Menu-bar Tray Icon** (affordance, not indication) and the **Overlay** (ephemeral celebration). Cycles: Hidden → Slit (idle) → Expanded with live waveform during a session → Loading during **ASR** and **Cleanup** → Slit/Hidden after paste.
 _Avoid_: Indicator, tray pill, status bar
 
 **Pill Visibility Mode**:
