@@ -38,10 +38,26 @@ _Avoid_: Post-processing, formatting, editing
 Optional context hints passed to the **Cleanup** stage describing the active app and (in future) user profile, custom dictionary, or session history. Always `Generic` in MVP; phase 2 lights up app-specific behaviour for Slack, Email, and Claude Code (the last including verbal slash-command recognition).
 _Avoid_: App context, hints
 
+### System surfaces
+
+type-less has no dock icon and no top menu bar — the **Menu-bar Tray Icon** is the sole persistent OS affordance. The **Pill** and **Overlay** are indication-only (the user does not interact with them).
+
+**Menu-bar Tray Icon**:
+The status-item in the top-right of the macOS menu bar (alongside WiFi, Battery, Spotlight). type-less's sole persistent affordance — click to summon the **Settings Popover**, right-click for a small contextual menu (Settings, Quit). Distinct from the **Pill** (indication, not affordance) and the **Overlay** (ephemeral celebration).
+_Avoid_: Tray icon (ambiguous — Windows "system tray" is a different surface), status-bar icon, taskbar icon, menu-bar icon (omits "tray" — clashes with the Top Menu Bar below)
+
+**Settings Popover**:
+The window that opens anchored beneath the **Menu-bar Tray Icon** when the user clicks it. Hosts all user-configurable settings (hotkey, Theme, Pill Visibility Mode, Overlay toggles). Decorated, non-transparent, not always-on-top — a conventional macOS menu-bar-app popover. Closes on blur or repeat tray-click.
+_Avoid_: Settings window (it is not free-floating; it anchors), preferences (we say "settings" everywhere), settings panel (generic)
+
+**Top Menu Bar**:
+The per-app `File / Edit / View / Window / Help` strip at the very top of the macOS screen, present when a regular app is focused. type-less does **not** have one (`LSUIElement: true` in the bundle plist suppresses it, along with the dock icon). Called out only to disambiguate the overloaded word "menu bar" — say **Top Menu Bar** when you mean this, **Menu-bar Tray Icon** when you mean the status area.
+_Avoid_: App menu, menu bar (ambiguous on its own)
+
 ### Recording feedback
 
 **Pill**:
-A floating, always-on-top, transparent, click-through indicator anchored at bottom-centre of the **Focused Display**. The continuous feedback channel for **Dictation Session** state. Distinct from the **Overlay**. Cycles: Hidden → Slit (idle) → Expanded with live waveform during a session → Loading during Cleanup → Slit/Hidden after paste.
+A floating, always-on-top, transparent, click-through indicator anchored at bottom-centre of the **Focused Display**. The continuous feedback channel for **Dictation Session** state. Distinct from the **Menu-bar Tray Icon** (affordance, not indication) and the **Overlay** (ephemeral celebration). Cycles: Hidden → Slit (idle) → Expanded with live waveform during a session → Loading during Cleanup → Slit/Hidden after paste.
 _Avoid_: Indicator, tray pill, status bar
 
 **Pill Visibility Mode**:
@@ -82,7 +98,8 @@ _Avoid_: Skin, pack, mod
 - The **Pill** reflects the live state of a **Dictation Session**, anchored to the **Focused Display**.
 - Each **Dictation Session** contributes its word count to the user's lifetime total. When the lifetime total crosses the threshold for the next **Speechcraft Level**, a **Speechcraft Level-Up** fires.
 - A **Speechcraft Level-Up** renders the **Overlay** using the currently selected **Theme**.
-- The **Pill** is continuous; the **Overlay** is ephemeral.
+- The **Menu-bar Tray Icon** is the sole persistent affordance — clicking it opens the **Settings Popover** anchored beneath the icon.
+- The **Pill** is continuous indication; the **Overlay** is ephemeral celebration; the **Menu-bar Tray Icon** is the persistent affordance.
 
 ## Example dialogue
 
