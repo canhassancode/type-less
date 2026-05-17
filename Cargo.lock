@@ -2789,6 +2789,7 @@ name = "pipeline"
 version = "0.0.0"
 dependencies = [
  "cpal",
+ "dirs",
  "fs4",
  "hound",
  "llama-cpp-2",

@@ -26,3 +26,4 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 [dev-dependencies]
 tempfile = "3"
 mockito = "1"
+dirs = "6"
