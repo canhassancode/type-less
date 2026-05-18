@@ -30,14 +30,28 @@ pnpm tauri dev
 | `pnpm typecheck` | TypeScript type-check |
 | `cargo test --workspace` | Rust unit tests |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Rust lint |
-| `cargo run --bin eval` | Pipeline regression suite (placeholder) |
+| `pnpm timing` | Pipeline perf gate — asserts ASR + Cleanup p95 < 1s. See [Perf regression gate](#perf-regression-gate). |
+
+## Perf regression gate
+
+`pnpm timing` runs `crates/eval/src/bin/timing.rs`: loads the ASR + Cleanup engines from the app data dir, runs 10 synthetic 5s F32 PCM fixtures (mix of silence and seeded low-amplitude noise), and asserts p95 < 1000ms.
+
+**This is an on-demand gate, not a routine command.** Run it when:
+
+- Touching anything in `crates/pipeline/` (asr, cleanup, resample)
+- Bumping `whisper-rs` or `llama-cpp-2` versions
+- Swapping the model files referenced in `models.json`
+- Before tagging a release
+- Investigating a suspected perf regression
+
+It needs the real models on disk (`pnpm bootstrap:models` first) and takes ~30-60s. The `pnpm` script pins `--release` because debug builds are 10-50× slower for whisper / llama work and would fail the budget on healthy code. Quality scoring (semantic similarity, F1, recorded fixtures) is out of scope here — it lives in a future eval slice.
 
 ## Project layout
 
 - `modules/app/` — Tauri frontend (Vite + React 18 + Tailwind 4 + Zustand)
 - `crates/pipeline/` — audio capture, ASR, cleanup, resampling, model registry
 - `crates/tauri-shell/` — the desktop app binary, IPC commands
-- `crates/eval/` — dev binaries (`eval`, `bootstrap-models`)
+- `crates/eval/` — dev binaries (`eval`, `bootstrap-models`, `timing`)
 - `docs/adr/` — architecture decision records
 - `CONTEXT.md` — domain glossary
 - `CLAUDE.md` — repo conventions for AI agents
