@@ -69,6 +69,14 @@ async cancelDictationSession() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async engineState() : Promise<Result<EngineState, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("engine_state") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async installationStatus() : Promise<Result<InstallationState, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("installation_status") };

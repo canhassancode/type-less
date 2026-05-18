@@ -1,22 +1,22 @@
 import { invoke } from '@tauri-apps/api/core';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { mountActivation } from '../../features/activation';
 import { InstallingModelsPanel, useInstallingModels } from '../../features/models';
+import { mountSessionOrchestratorWithDefaults } from '../../features/orchestrator';
 import '../../shared/ui/styles.css';
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Settings window: missing #root');
 
-const activationPromise = mountActivation().catch((error) => {
-  console.error('[activation] failed to register hotkey', error);
+const orchestratorPromise = mountSessionOrchestratorWithDefaults().catch((error) => {
+  console.error('[orchestrator] failed to mount', error);
   return undefined;
 });
 
 if (import.meta.hot) {
   import.meta.hot.dispose(async () => {
-    const unbind = await activationPromise;
-    if (unbind) await unbind();
+    const dispose = await orchestratorPromise;
+    if (dispose) await dispose();
   });
 }
 

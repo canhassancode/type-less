@@ -154,6 +154,12 @@ fn cancel_dictation_session(state: State<'_, Session>) -> Result<(), String> {
 
 #[tauri::command]
 #[specta::specta]
+fn engine_state(handles: State<'_, EngineHandles>) -> Result<EngineState, String> {
+    Ok(handles.state())
+}
+
+#[tauri::command]
+#[specta::specta]
 async fn installation_status(app: AppHandle) -> Result<InstallationState, String> {
     let dir = models_dir(&app)?;
     tauri::async_runtime::spawn_blocking(move || -> Result<InstallationState, String> {
@@ -316,6 +322,7 @@ fn main() {
             start_dictation_session,
             end_dictation_session,
             cancel_dictation_session,
+            engine_state,
             installation_status,
             list_models,
             download_model,
@@ -413,12 +420,14 @@ fn main() {
             match models_dir(app_handle) {
                 Ok(dir) => {
                     let app_for_engine_sink = app_handle.clone();
+                    let handles_for_engine_sink = handles_for_loaders.clone();
                     spawn_loaders(
                         handles_for_loaders.clone(),
                         load_asr_from(dir.join(ASR_MODEL_FILENAME)),
                         load_cleanup_from(dir.join(CLEANUP_MODEL_FILENAME), CLEANUP_PROMPT),
                         Arc::new(move |state| {
                             eprintln!("[engines] state: {state:?}");
+                            handles_for_engine_sink.set_state(state.clone());
                             let _ = EngineStateChanged { state }.emit(&app_for_engine_sink);
                         }),
                     );

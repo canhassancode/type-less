@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
 use pipeline::asr::AsrEngine;
@@ -8,10 +8,21 @@ use pipeline::cleanup::CleanupEngine;
 use serde::Serialize;
 use specta::Type;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct EngineHandles {
     asr: Arc<OnceLock<Arc<AsrEngine>>>,
     cleanup: Arc<OnceLock<Arc<CleanupEngine>>>,
+    state: Arc<Mutex<EngineState>>,
+}
+
+impl Default for EngineHandles {
+    fn default() -> Self {
+        Self {
+            asr: Arc::new(OnceLock::new()),
+            cleanup: Arc::new(OnceLock::new()),
+            state: Arc::new(Mutex::new(EngineState::Loading)),
+        }
+    }
 }
 
 impl EngineHandles {
@@ -25,6 +36,14 @@ impl EngineHandles {
 
     pub fn try_cleanup(&self) -> Option<Arc<CleanupEngine>> {
         self.cleanup.get().cloned()
+    }
+
+    pub fn state(&self) -> EngineState {
+        self.state.lock().expect("engine state poisoned").clone()
+    }
+
+    pub fn set_state(&self, state: EngineState) {
+        *self.state.lock().expect("engine state poisoned") = state;
     }
 }
 
@@ -177,6 +196,30 @@ mod tests {
         let h2 = h1.clone();
         assert!(Arc::ptr_eq(&h1.asr, &h2.asr));
         assert!(Arc::ptr_eq(&h1.cleanup, &h2.cleanup));
+        assert!(Arc::ptr_eq(&h1.state, &h2.state));
+    }
+
+    #[test]
+    fn state_defaults_to_loading() {
+        let h = EngineHandles::new();
+        assert_eq!(h.state(), EngineState::Loading);
+    }
+
+    #[test]
+    fn set_state_updates_visible_state() {
+        let h = EngineHandles::new();
+        h.set_state(EngineState::Ready);
+        assert_eq!(h.state(), EngineState::Ready);
+        h.set_state(EngineState::Degraded);
+        assert_eq!(h.state(), EngineState::Degraded);
+    }
+
+    #[test]
+    fn cloned_handles_observe_each_others_state_updates() {
+        let h1 = EngineHandles::new();
+        let h2 = h1.clone();
+        h1.set_state(EngineState::Ready);
+        assert_eq!(h2.state(), EngineState::Ready);
     }
 
     #[test]
