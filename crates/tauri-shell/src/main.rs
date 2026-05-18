@@ -130,21 +130,18 @@ fn hide_overlay(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 #[specta::specta]
-fn start_dictation_session(app: AppHandle, state: State<'_, Session>) -> Result<(), String> {
-    state.start().map_err(|err| format!("{err:?}"))?;
-    set_pill_visible(&app, true)
+fn start_dictation_session(state: State<'_, Session>) -> Result<(), String> {
+    state.start().map_err(|err| format!("{err:?}"))
 }
 
 #[tauri::command]
 #[specta::specta]
 async fn end_dictation_session(app: AppHandle) -> Result<(), String> {
-    let app_for_task = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let session: State<Session> = app_for_task.state();
+        let session: State<Session> = app.state();
         if let Err(err) = session.stop() {
             eprintln!("[dictation] stop failed: {err:?}");
         }
-        let _ = set_pill_visible(&app_for_task, false);
     });
     Ok(())
 }
