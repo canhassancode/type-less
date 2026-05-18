@@ -120,6 +120,12 @@ Dictate each phrase via the hotkey. Capture the pasted output. Mark each cell �
 | 13 | "the meeting is at three — actually four" | Restart preserved verbatim, possibly with em-dash punctuation. NOT collapsed to "The meeting is at four." | If the model collapses, it has paraphrased — violates v1 rule. Note as 🟡 if quality feels better than the rule, ❌ if quality feels worse. |
 | 14 | "I was going to write the docs first but actually let me think the api needs to land first" | Both halves preserved; punctuation inferred. | Same — should not be edited to a single clean sentence. |
 
+#### Observed during slice #4 ship (long-form free dictation)
+
+| Spoken | Pasted | Status | Decision |
+| --- | --- | --- | --- |
+| "So here is a long bit of speech for an API design. We want to start by using the pickup for a GitHub API issue. We then want to triage that issue and release a separate product requirement doc. Or as part of this exercise, we're going to refer to it as a PRD. We then need to place all this within a package JSON and also the README file. Maybe we should also add it to… Maybe we should add it to explore the MD as well." | Same phrase pasted faithfully; the in-speech restart "Maybe we should also add it to… Maybe we should add it to…" preserved verbatim with the ellipsis. | ✅ matches the v1 "no paraphrase" rule — the model held the restart instead of collapsing it. | **Ship v1 as-is.** Restart literalism is the correct v1 behaviour. Aggressive collapse risks dropping legitimate hesitation ("I think we should… actually no, we should") that carries meaning. Revisit only if slice #14's recorded-fixture quality eval shows objective harm, or if `cleanup_v2.txt` (slice #8, voice commands) is already touching the prompt and the trade-off can be reconsidered with measurement instead of vibes. |
+
 ### E5. Numbers / units / dates (unclaimed capability — probing)
 
 The prompt does not explicitly handle number formatting. These tests reveal the model's default behaviour.
