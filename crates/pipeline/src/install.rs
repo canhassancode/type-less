@@ -129,6 +129,13 @@ pub struct InstallationState {
     pub items: Vec<(String, ModelStatus)>,
 }
 
+pub fn should_notify_missing_models(state: &InstallationState) -> bool {
+    state
+        .items
+        .iter()
+        .any(|(_, status)| !matches!(status, ModelStatus::Installed))
+}
+
 pub fn check_installation(registry: &Registry, models_dir: &Path) -> InstallationState {
     let items = registry
         .models
@@ -316,5 +323,44 @@ mod tests {
         let state = check_installation(&registry, dir.path());
 
         assert_eq!(state.items[0].1, ModelStatus::ChecksumMismatch);
+    }
+
+    #[test]
+    fn should_notify_returns_true_when_any_model_not_installed() {
+        let state = InstallationState {
+            items: vec![
+                ("asr".into(), ModelStatus::Installed),
+                ("cleanup".into(), ModelStatus::NotInstalled),
+            ],
+        };
+        assert!(should_notify_missing_models(&state));
+    }
+
+    #[test]
+    fn should_notify_returns_true_when_any_model_has_checksum_mismatch() {
+        let state = InstallationState {
+            items: vec![
+                ("asr".into(), ModelStatus::ChecksumMismatch),
+                ("cleanup".into(), ModelStatus::Installed),
+            ],
+        };
+        assert!(should_notify_missing_models(&state));
+    }
+
+    #[test]
+    fn should_notify_returns_false_when_all_models_installed() {
+        let state = InstallationState {
+            items: vec![
+                ("asr".into(), ModelStatus::Installed),
+                ("cleanup".into(), ModelStatus::Installed),
+            ],
+        };
+        assert!(!should_notify_missing_models(&state));
+    }
+
+    #[test]
+    fn should_notify_returns_false_for_empty_registry() {
+        let state = InstallationState { items: vec![] };
+        assert!(!should_notify_missing_models(&state));
     }
 }

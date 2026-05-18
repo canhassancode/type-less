@@ -9,13 +9,16 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
 use pipeline::download::stream_to_sink;
-use pipeline::install::{DownloadSink, InstallationState, check_installation, has_disk_space};
+use pipeline::install::{
+    DownloadSink, InstallationState, check_installation, has_disk_space, should_notify_missing_models,
+};
 use pipeline::models::{Model, Registry};
 use serde::Serialize;
 use specta::Type;
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, State, WindowEvent};
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_positioner::{Position, WindowExt};
 use tauri_specta::{Builder, Event, collect_commands, collect_events};
 
@@ -27,6 +30,8 @@ const DOWNLOAD_DISK_HEADROOM_BYTES: u64 = 1024 * 1024 * 1024;
 const CLEANUP_PROMPT: &str = include_str!("../../pipeline/prompts/cleanup_v1.txt");
 const ASR_MODEL_FILENAME: &str = "ggml-small.en.bin";
 const CLEANUP_MODEL_FILENAME: &str = "qwen2.5-1.5b-instruct-q4_k_m.gguf";
+const MISSING_MODELS_NOTIFICATION_BODY: &str =
+    "type-less needs to install its language models. Open Settings to begin.";
 
 fn parse_registry() -> Result<Registry, String> {
     Registry::from_json(MODELS_JSON).map_err(|err| err.to_string())
@@ -364,6 +369,7 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .manage(engine_handles.clone())
         .manage(build_session(engine_handles, app_handle_slot))
         .invoke_handler(builder.invoke_handler())
@@ -431,6 +437,31 @@ fn main() {
                             let _ = EngineStateChanged { state }.emit(&app_for_engine_sink);
                         }),
                     );
+
+                    let app_for_notification = app_handle.clone();
+                    let dir_for_notification = dir;
+                    tauri::async_runtime::spawn_blocking(move || {
+                        let registry = match parse_registry() {
+                            Ok(r) => r,
+                            Err(err) => {
+                                eprintln!("[notify] could not parse registry: {err}");
+                                return;
+                            }
+                        };
+                        let state = check_installation(&registry, &dir_for_notification);
+                        if !should_notify_missing_models(&state) {
+                            return;
+                        }
+                        if let Err(err) = app_for_notification
+                            .notification()
+                            .builder()
+                            .title("type-less")
+                            .body(MISSING_MODELS_NOTIFICATION_BODY)
+                            .show()
+                        {
+                            eprintln!("[notify] failed to fire missing-models notification: {err}");
+                        }
+                    });
                 }
                 Err(err) => eprintln!("[engines] could not resolve models_dir: {err}"),
             }
