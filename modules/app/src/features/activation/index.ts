@@ -15,7 +15,7 @@ export async function mountActivation(): Promise<Unbind> {
     register,
     unregister,
     hotkey: TRACER_HOTKEY,
-    onPress: async () => unwrap(await commands.startSession()),
-    onRelease: async () => unwrap(await commands.stopSession()),
+    onPress: async () => unwrap(await commands.startDictationSession()),
+    onRelease: async () => unwrap(await commands.endDictationSession()),
   });
 }

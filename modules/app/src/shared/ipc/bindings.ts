@@ -45,17 +45,57 @@ async hideOverlay() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async startSession() : Promise<Result<null, string>> {
+async startDictationSession() : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("start_session") };
+    return { status: "ok", data: await TAURI_INVOKE("start_dictation_session") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
 },
-async stopSession() : Promise<Result<null, string>> {
+async endDictationSession() : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("stop_session") };
+    return { status: "ok", data: await TAURI_INVOKE("end_dictation_session") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async cancelDictationSession() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cancel_dictation_session") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async engineState() : Promise<Result<EngineState, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("engine_state") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async installationStatus() : Promise<Result<InstallationState, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("installation_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listModels() : Promise<Result<Model[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_models") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async downloadModel(modelId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("download_model", { modelId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -66,6 +106,23 @@ async stopSession() : Promise<Result<null, string>> {
 /** user-defined events **/
 
 
+export const events = __makeEvents__<{
+dictationCompleted: DictationCompleted,
+dictationError: DictationError,
+dictationStateChanged: DictationStateChanged,
+engineStateChanged: EngineStateChanged,
+modelDownloadCompleted: ModelDownloadCompleted,
+modelDownloadFailed: ModelDownloadFailed,
+modelDownloadProgress: ModelDownloadProgress
+}>({
+dictationCompleted: "dictation-completed",
+dictationError: "dictation-error",
+dictationStateChanged: "dictation-state-changed",
+engineStateChanged: "engine-state-changed",
+modelDownloadCompleted: "model-download-completed",
+modelDownloadFailed: "model-download-failed",
+modelDownloadProgress: "model-download-progress"
+})
 
 /** user-defined constants **/
 
@@ -73,7 +130,20 @@ async stopSession() : Promise<Result<null, string>> {
 
 /** user-defined types **/
 
-
+export type DictationCompleted = { word_count: number }
+export type DictationError = { stage: ErrorStage; message: string }
+export type DictationStage = "Recording" | "Loading" | "Idle"
+export type DictationStateChanged = { stage: DictationStage }
+export type EngineState = "Loading" | "Ready" | "Degraded"
+export type EngineStateChanged = { state: EngineState }
+export type ErrorStage = "Asr" | "Cleanup" | "Paste"
+export type InstallationState = { items: ([string, ModelStatus])[] }
+export type Model = { id: string; purpose: Purpose; url: string; sha256: string; size_bytes: number; filename: string }
+export type ModelDownloadCompleted = { model_id: string }
+export type ModelDownloadFailed = { model_id: string; message: string }
+export type ModelDownloadProgress = { model_id: string; downloaded: number; total: number }
+export type ModelStatus = "not_installed" | "installed" | "checksum_mismatch"
+export type Purpose = "asr" | "cleanup"
 
 /** tauri-specta globals **/
 

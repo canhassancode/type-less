@@ -24,7 +24,8 @@ Check `docs/adr` for a list of ADR decisions made.
 - `pnpm lint` — Biome
 - `cargo test` — Rust unit tests
 - `cargo clippy` — Rust lint
-- `cargo run --bin eval` — pipeline regression suite
+- `pnpm timing` — perf regression gate (`crates/eval/src/bin/timing.rs`): ASR + Cleanup p95 < 1s budget. **Not** a routine command — on-demand only, when touching `crates/pipeline/`, bumping `whisper-rs`/`llama-cpp-2`, swapping models, or before releases. Pinned to `--release` (debug is 10-50× slower and fails the budget on healthy code). Needs models on disk via `pnpm bootstrap:models`. See README's "Perf regression gate" section.
+- `cargo run --bin eval` — placeholder for future quality-eval surface (slice #14)
 
 # Others
 
